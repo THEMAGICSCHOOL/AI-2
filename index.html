@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MNIST TensorFlow.js Example</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; }
+        canvas { border: 1px solid black; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-vis"></script>
+</head>
+<body>
+    <h1>MNIST TensorFlow.js Example</h1>
+    <canvas id="mnist-canvas"></canvas>
+    <script>
+        async function run() {
+            // Load and prepare the MNIST dataset
+            const mnist = await tf.data.mnist();
+            const [trainImages, trainLabels] = await mnist.train.nextBatch(60000);
+            const [testImages, testLabels] = await mnist.test.nextBatch(10000);
+            const trainXs = trainImages.reshape([60000, 28, 28, 1]);
+            const testXs = testImages.reshape([10000, 28, 28, 1]);
+
+            // Build the neural network model
+            const model = tf.sequential();
+            model.add(tf.layers.flatten({ inputShape: [28, 28, 1] }));
+            model.add(tf.layers.dense({ units: 128, activation: 'relu' }));
+            model.add(tf.layers.dense({ units: 10 }));
+
+            // Compile the model
+            model.compile({
+                optimizer: 'adam',
+                loss: tf.losses.softmaxCrossEntropy,
+                metrics: ['accuracy']
+            });
+
+            // Train the model
+            await model.fit(trainXs, trainLabels, {
+                epochs: 5,
+                validationData: [testXs, testLabels],
+                callbacks: tfvis.show.fitCallbacks(
+                    { name: 'Training Performance' },
+                    ['loss', 'val_loss', 'accuracy', 'val_accuracy'],
+                    { height: 200, callbacks: ['onEpochEnd'] }
+                )
+            });
+
+            // Evaluate the model
+            const evalOutput = model.evaluate(testXs, testLabels);
+            evalOutput[1].print();  // Print test accuracy
+
+            // Make predictions and display the first test image with predicted and true labels
+            const predictions = model.predict(testXs);
+            const canvas = document.getElementById('mnist-canvas');
+            const ctx = canvas.getContext('2d');
+            const imageData = new ImageData(28, 28);
+            const data = testXs.dataSync().slice(0, 28 * 28);
+            for (let i = 0; i < 28 * 28; i++) {
+                const val = data[i] * 255;
+                imageData.data[4 * i] = val;
+                imageData.data[4 * i + 1] = val;
+                imageData.data[4 * i + 2] = val;
+                imageData.data[4 * i + 3] = 255;
+            }
+            ctx.putImageData(imageData, 0, 0);
+            const predictedLabel = predictions.argMax(1).dataSync()[0];
+            const trueLabel = testLabels.argMax(1).dataSync()[0];
+            document.querySelector('h1').textContent = `Predicted: ${predictedLabel}, True: ${trueLabel}`;
+        }
+
+        run();
+    </script>
+</body>
+</html>
